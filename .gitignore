@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# RevelAI model cache used by the local enhance backend
+.revelai_models/
+models/
+
+# Local output folders produced by the CLI
+photos/
+photos_enhanced/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
