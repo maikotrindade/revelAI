@@ -266,12 +266,22 @@ the paper it is mounted on, on a page with a busy texture, may be missed or
 cropped short. This is why `--review` exists and why it is not hidden away. Run
 `--verify` on a large batch and review what it flags.
 
-**Overlapping prints are found but not perfectly separated.** Where one
-photograph is laid over another, the union of the two is an L shape whose
-borders belong to two different rectangles, and locally there is nothing in the
-image that says which. RevelAI finds both, flags the page, and does not pretend
-otherwise; on the test fixture the upper print comes out around 0.8 IoU instead
-of the 0.97 a cleanly bordered print reaches.
+**Prints that touch or overlap may come out as one crop.** Two photographs
+mounted edge to edge are separated only by a shadow line, and where one print is
+laid over another the union is an L shape whose borders belong to two different
+rectangles. Locally there is nothing in the image that says which.
+
+RevelAI measures how strong the strongest line running through a crop is,
+relative to that crop's own borders. Across the test fixtures a *single*
+photograph reaches 0.287 — a horizon, a roofline or the edge of a table all
+produce a long straight line inside a perfectly ordinary photograph — and a
+genuine seam between two prints starts at 0.320. A margin of ten per cent is not
+enough to cut a photograph on, so RevelAI does not.
+
+What it does instead: it separates the pair when the detection strategies
+independently propose both halves, and otherwise returns one crop that says
+`may be two photographs mounted edge to edge` and flags the page. The invariant
+the test suite enforces is that **no crop is ever both wrong and unflagged**.
 
 **Face restoration reconstructs faces. It does not reveal them.**
 

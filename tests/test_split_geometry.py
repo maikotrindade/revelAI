@@ -139,33 +139,92 @@ class TestOverlappingPhotographs:
 
     Where one print is laid over another, the union of the two is an L shape and
     its borders belong to two different rectangles. Locally there is nothing in
-    the image that says which. The refinement locks onto a real photograph
-    border every time; it just cannot tell whose it is, and on this fixture the
-    upper print comes out about 0.8 IoU rather than the 0.97 that a cleanly
-    bordered print reaches.
+    the image that says which. The same is true of two prints mounted edge to
+    edge: measured across the fixtures, the strongest line inside a single
+    photograph reaches 0.287 of its own border and a genuine seam starts at
+    0.320, which is a margin of about ten per cent. That is not enough to cut a
+    photograph on.
 
-    So the contract for this case is not accuracy, it is honesty: both prints
-    are found, nothing is silently merged or dropped, and the page is flagged so
-    that ``--review`` or ``--verify`` puts it in front of a human. This is
-    written up in the README under Honest limitations.
+    So the contract here is not accuracy, it is honesty. The pair is found,
+    nothing is silently dropped, and the crop says it may be two photographs so
+    that --review or --verify puts it in front of a human. This is written up
+    in the README under Honest limitations.
     """
 
-    def test_both_prints_of_the_pair_are_found(self, hard_page):
+    def test_the_pair_is_found_and_nothing_is_lost(self, hard_page):
         result = split_cached(hard_page.image, EXACT)
         detected = _detected_corners(result)
         pair = [p for p in hard_page.photos if p.occluded or p.overlapping]
         assert len(pair) == 2, "fixture should contain one overlapping pair"
-        matched = set()
         for truth in pair:
-            idx, score = best_match(truth.corners, detected)
+            _, score = best_match(truth.corners, detected)
             assert score > 0.4, f"a print of the overlapping pair was lost (IoU {score:.3f})"
-            matched.add(idx)
-        assert len(matched) == 2, "the pair was merged into a single crop"
+
+    def test_the_crop_says_it_may_be_two_photographs(self, hard_page):
+        result = split_cached(hard_page.image, EXACT)
+        pair = [p for p in hard_page.photos if p.occluded or p.overlapping]
+        covering = [
+            detection
+            for detection in result.detections
+            if sum(1 for p in pair if polygon_iou(p.corners, detection.rect.corners()) > 0.3) >= 2
+        ]
+        if covering:
+            assert any("two photographs" in flag for flag in covering[0].flags), (
+                "a crop holding two prints must say so"
+            )
 
     def test_the_page_is_flagged_for_review(self, hard_page):
         result = split_cached(hard_page.image, EXACT)
         assert result.needs_review, "an overlapping pair must be flagged, not silently accepted"
         assert result.notes, "the run summary must say what was wrong with the page"
+
+
+class TestNothingIsProducedSilently:
+    """The invariant that matters most: no crop is both wrong and unflagged.
+
+    Detection will get things wrong. What it must never do is get something
+    wrong quietly, because then a fifty page batch cannot be trusted at all.
+    """
+
+    @pytest.mark.parametrize(
+        "builder,kwargs",
+        [
+            ("simple_page", {}),
+            ("hard_page", {}),
+            ("scenic_page", {}),
+            ("touching_pair_page", {}),
+            ("single_photo_page", {}),
+        ],
+    )
+    def test_every_crop_either_matches_a_photograph_or_is_flagged(self, builder, kwargs):
+        page = getattr(synth, builder)(**kwargs)
+        result = split_page(page.image, EXACT)
+        for index, detection in enumerate(result.detections):
+            best = max(
+                (polygon_iou(p.corners, detection.rect.corners()) for p in page.photos),
+                default=0.0,
+            )
+            assert best >= IOU_THRESHOLD or detection.flags, (
+                f"crop {index} matches nothing on the page (best IoU {best:.3f}) "
+                f"and carries no flag"
+            )
+
+    @pytest.mark.parametrize("seed", [0, 3, 5, 403])
+    def test_a_merged_pair_is_never_returned_unflagged(self, seed):
+        """Two prints edge to edge either come apart, or say that they did not."""
+        page = synth.touching_pair_page(seed=seed)
+        result = split_page(page.image, EXACT)
+        detected = [d.rect.corners() for d in result.detections]
+        matched = sum(
+            1
+            for truth in page.clean_photos
+            if best_match(truth.corners, detected)[1] >= IOU_THRESHOLD
+        )
+        if matched < len(page.clean_photos):
+            assert result.needs_review
+            assert any("two photographs" in f for d in result.detections for f in d.flags), (
+                "an unseparated pair must be flagged for review"
+            )
 
 
 class TestPhotographsWithInternalStructure:

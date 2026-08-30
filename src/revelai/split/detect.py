@@ -32,9 +32,9 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
-from revelai.split.refine import RotRect
+from revelai.split.refine import PreparedImage, RotRect, prepare_image, score_lines
 
-__all__ = ["DetectParams", "PageRegion", "isolate_page", "find_candidates"]
+__all__ = ["DetectParams", "PageRegion", "Candidate", "isolate_page", "find_candidates"]
 
 
 @dataclass
@@ -53,7 +53,12 @@ class DetectParams:
     #: Relative deviation from the local paper tone that counts as "not paper".
     paper_deviation: float = 0.045
     #: A contour must fill this much of its own bounding rectangle to be a print.
-    min_rectangularity: float = 0.72
+    #:
+    #: A well-found photograph measures 0.98 or better. The value is set well
+    #: below that but well above the 0.73 to 0.77 that a *fragment* of a print
+    #: scores, because a fragment that survives can be mistaken for one half of
+    #: a pair and take a correct crop down with it.
+    min_rectangularity: float = 0.82
     #: A candidate overlapping the page itself by more than this is the page.
     max_page_iou: float = 0.70
     #: How much of a candidate must lie inside another to count as contained.
@@ -64,6 +69,32 @@ class DetectParams:
     min_part_fraction: float = 0.25
     #: The parts must between them account for this much of the merged blob.
     merge_coverage: float = 0.65
+    #: How strong a line running through a candidate must be, relative to that
+    #: candidate's own strongest border, before it is treated as the seam
+    #: between two photographs mounted edge to edge.
+    #:
+    #: Measured over the fixtures, a single photograph's strongest internal line
+    #: reaches 0.287 of its own border and a genuine seam starts at 0.320. That
+    #: is a margin of about ten per cent, which is not enough to decide on
+    #: alone: a horizon, a roofline or the edge of a table all produce a long
+    #: straight line inside a perfectly ordinary photograph. So this never
+    #: splits anything by itself. It corroborates a split that the region
+    #: strategies already proposed, and otherwise it only raises a flag for
+    #: review, which is what --review and --verify are for.
+    seam_ratio: float = 0.30
+
+
+@dataclass
+class Candidate:
+    """A proposed photograph, and what detection is unsure about."""
+
+    rect: RotRect
+    #: How rectangular the contour it came from was.
+    rectangularity: float = 1.0
+    #: Strength of the strongest line running through it, against its own
+    #: borders. A high value on a candidate that was *not* split means it may be
+    #: two photographs mounted edge to edge.
+    seam: float = 0.0
 
 
 @dataclass
@@ -438,8 +469,54 @@ def _containment(inner: RotRect, outer: RotRect) -> float:
     return float(area / inner.area) if inner.area > 0 else 0.0
 
 
+def _internal_border_ratio(rect: RotRect, prepared: PreparedImage) -> float:
+    """Strength of the strongest line through a candidate, against its own borders.
+
+    Two photographs mounted edge to edge are separated only by a shadow line or
+    a sliver of paper, and no region-based method can see that. A line integral
+    can: the seam runs the full width of the blob and scores like a border,
+    because it is two borders.
+
+    The measurement is relative to the candidate's own strongest edge, because
+    an absolute threshold would depend on the exposure of the photograph and on
+    how dark the album paper is.
+    """
+    u, v = rect.axes
+    centre = rect.centre
+    internal = 0.0
+    outer = 0.0
+    for normal, tangent, extent, span in ((u, v, rect.w, rect.h), (v, u, rect.h, rect.w)):
+        if extent < 40 or span < 20:
+            continue
+        outer = max(
+            outer,
+            float(
+                score_lines(
+                    prepared,
+                    centre,
+                    tangent,
+                    normal,
+                    span,
+                    np.array([-extent / 2.0, extent / 2.0]),
+                ).max()
+            ),
+        )
+        # Only the middle of the candidate: a seam near the rim would leave a
+        # sliver rather than a photograph.
+        reach = 0.35 * extent
+        offsets = np.arange(-reach, reach + 1e-6, 1.0)
+        if len(offsets) >= 5:
+            internal = max(
+                internal,
+                float(score_lines(prepared, centre, tangent, normal, span, offsets).max()),
+            )
+    return internal / outer if outer > 1e-6 else 0.0
+
+
 def _drop_merged(
-    scored: list[tuple[RotRect, float]], params: DetectParams
+    scored: list[tuple[RotRect, float]],
+    params: DetectParams,
+    prepared: PreparedImage | None = None,
 ) -> list[tuple[RotRect, float]]:
     """Discard a candidate that is explained by two or more disjoint children.
 
@@ -467,8 +544,15 @@ def _drop_merged(
             if all(_rect_iou(child, kept) < 0.2 for kept in disjoint):
                 disjoint.append(child)
 
+        # Two disjoint children tiling a parent is suggestive but not proof. The
+        # sky and the ground of one landscape photograph do exactly that when
+        # the edge strategy traces the horizon, and dropping the parent then
+        # cuts a real photograph in half. Require a seam as well: two
+        # photographs have a border between them, a landscape does not.
         covered = sum(child.area for child in disjoint)
-        if len(disjoint) >= 2 and covered >= params.merge_coverage * parent.area:
+        tiled = len(disjoint) >= 2 and covered >= params.merge_coverage * parent.area
+        seamed = prepared is None or _internal_border_ratio(parent, prepared) >= params.seam_ratio
+        if tiled and seamed:
             continue
         survivors.append((parent, score))
     return survivors
@@ -499,7 +583,7 @@ def _drop_contained(
 
 def find_candidates(
     image: np.ndarray, params: DetectParams | None = None
-) -> tuple[list[RotRect], PageRegion, float]:
+) -> tuple[list[Candidate], PageRegion, float]:
     """Propose photograph locations on a page.
 
     Returns the candidates in full-resolution coordinates, the page region at
@@ -531,14 +615,24 @@ def find_candidates(
     # Collapse near-duplicates first, but only near-duplicates: a merged pair
     # overlaps each of its halves by about 0.5, and must survive to this point
     # so that _drop_merged can recognise it for what it is.
+    prepared = prepare_image(working)
+
     viable = _suppress_overlaps(viable, 0.60)
-    viable = _drop_merged(viable, params)
+    viable = _drop_merged(viable, params, prepared)
     viable = _drop_contained(viable, params)
     kept = _suppress_overlaps(viable, params.suppress_iou)
 
     inverse = 1.0 / scale if scale else 1.0
-    rects = [rect.scaled(inverse) for rect, _ in kept]
+    candidates = [
+        Candidate(
+            rect=rect.scaled(inverse),
+            rectangularity=fill,
+            # Measured at working scale, where the gradients were computed.
+            seam=_internal_border_ratio(rect, prepared),
+        )
+        for rect, fill in kept
+    ]
     # A stable order in, a stable order out. The pipeline re-sorts into reading
     # order once the geometry is final.
-    rects.sort(key=lambda r: (round(r.cy, 3), round(r.cx, 3)))
-    return rects, page, scale
+    candidates.sort(key=lambda c: (round(c.rect.cy, 3), round(c.rect.cx, 3)))
+    return candidates, page, scale

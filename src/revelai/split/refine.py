@@ -35,6 +35,7 @@ __all__ = [
     "PreparedImage",
     "prepare_image",
     "refine_rect",
+    "score_lines",
 ]
 
 # Defaults from the specification. They are conservative on purpose: a small
@@ -456,3 +457,21 @@ def refine_rect(
         score=total,
         edges=fits,
     )
+
+
+def score_lines(
+    prepared: PreparedImage,
+    base: np.ndarray,
+    tangent: np.ndarray,
+    normal: np.ndarray,
+    length: float,
+    offsets: np.ndarray,
+) -> np.ndarray:
+    """Line-integral score for a family of parallel lines.
+
+    The same measurement the edge search uses, exposed so detection can ask a
+    different question with it: not "where is this edge?" but "is there a
+    photograph border running through the middle of this candidate?".
+    """
+    scores, _ = _score_edge(prepared, base, tangent, normal, length, np.asarray(offsets, float))
+    return scores

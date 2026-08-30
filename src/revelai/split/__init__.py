@@ -56,6 +56,11 @@ class SplitOptions:
     area_deviation: float = 0.5
     #: A gradient peak wider than this is a shadow, not the border of a print.
     soft_edge_width: float = 9.0
+    #: A crop whose strongest internal line reaches this fraction of its own
+    #: borders may be two photographs mounted edge to edge. It is reported
+    #: rather than cut, because the measurement cannot tell a seam from a
+    #: horizon reliably enough to act on by itself.
+    seam_warning: float = 0.30
     #: How many times refinement may be re-applied to its own result.
     refine_passes: int = 3
 
@@ -75,6 +80,9 @@ class Detection:
     edge_score: float
     #: Widest gradient peak among the four edges, in pixels.
     peak_width: float
+    #: Strength of the strongest line running through the crop, against its own
+    #: borders. High means it may be two photographs mounted edge to edge.
+    seam: float = 0.0
     #: Per-detection validation notes, e.g. "overlaps another photograph".
     flags: list[str] = field(default_factory=list)
 
@@ -197,6 +205,13 @@ def _validate(
                 needs_review = True
 
     for detection in detections:
+        if detection.seam >= options.seam_warning:
+            message = "may be two photographs mounted edge to edge"
+            detection.flags.append(message)
+            notes.append(message)
+            needs_review = True
+
+    for detection in detections:
         if detection.peak_width > options.soft_edge_width:
             # A print border is abrupt. A shadow cast by the phone falls off
             # gently and produces a broad gradient peak, which is how the two
@@ -234,15 +249,15 @@ def split_page(
 
     refined: list[Detection] = []
     for candidate in candidates:
-        result = _refine_until_still(prepared, candidate, options)
-        refined.append(
-            Detection(
-                rect=result.rect,
-                crop_corners=inset_corners(result.rect.corners(), options.inset),
-                edge_score=result.weakest_edge,
-                peak_width=result.widest_peak,
-            )
+        result = _refine_until_still(prepared, candidate.rect, options)
+        detection = Detection(
+            rect=result.rect,
+            crop_corners=inset_corners(result.rect.corners(), options.inset),
+            edge_score=result.weakest_edge,
+            peak_width=result.widest_peak,
+            seam=candidate.seam,
         )
+        refined.append(detection)
 
     order = order_on_page([d.rect for d in refined])
     detections = [refined[i] for i in order]
