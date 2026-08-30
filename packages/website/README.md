@@ -1,5 +1,7 @@
 # RevelAI — website
 
+**Live: [maikotrindade.com/revelAI](https://maikotrindade.com/revelAI/)**
+
 The public face of [RevelAI](../../README.md): what the tool does, what it
 refuses to do, and why the honest limitations are on the front page rather than
 buried.

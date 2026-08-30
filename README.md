@@ -15,7 +15,7 @@ This repository is a monorepo with three packages.
 | --- | --- | --- |
 | [`packages/engine`](packages/engine) | The Python library and the `revelai` CLI. Detection, cropping, restoration, VLM verification. | 239 tests, CI on Linux/macOS/Windows × Python 3.10–3.13 |
 | [`packages/mcp-server`](packages/mcp-server) | An MCP server exposing the engine to AI assistants. | 61 tests, all offline. [Brief](packages/mcp-server/PROMPT.md) |
-| [`packages/website`](packages/website) | The public site: what the tool does, and the honest limitations on the front page. | Static export, zero axe violations. [Brief](packages/website/PROMPT.md) |
+| [`packages/website`](packages/website) | The public site: what the tool does, and the honest limitations on the front page. | Live at [maikotrindade.com/revelAI](https://maikotrindade.com/revelAI/). [Brief](packages/website/PROMPT.md) |
 
 ## Quick start
 
