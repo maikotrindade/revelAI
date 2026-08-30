@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+      "Liberation Mono", monospace;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    /* Anchored sections should not land under the sticky header. */
+    scroll-padding-top: 5rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    @apply bg-paper-50 text-ink-800 antialiased dark:bg-ink-950 dark:text-paper-200;
+  }
+
+  /* A visible focus ring everywhere, because the whole page has to be usable
+     from the keyboard. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ember-500 ring-offset-2 ring-offset-paper-50 dark:ring-offset-ink-950;
+  }
+}
+
+@layer components {
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50
+      focus:rounded-md focus:bg-ink-900 focus:px-4 focus:py-2 focus:text-paper-50
+      dark:focus:bg-paper-100 dark:focus:text-ink-900;
+  }
+}

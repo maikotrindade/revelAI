@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Synced from packages/engine/docs/img by scripts/sync-figures.mjs.
+# One source of truth; regenerate them with make_figures.py.
+public/img/

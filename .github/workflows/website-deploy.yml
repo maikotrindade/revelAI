@@ -1,0 +1,57 @@
+name: website deploy
+
+# Deploys the static export to GitHub Pages. Pushes to main only: a pull
+# request gets its checks from website-ci.yml and has no business publishing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/website/**"
+      - "packages/engine/docs/img/**"
+      - ".github/workflows/website-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/configure-pages@v5
+        id: pages
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        # A project site is served from /<repo>, so assets need the prefix.
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: pnpm --filter @revelai/website build
+      - name: Disable Jekyll
+        run: touch packages/website/out/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/website/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

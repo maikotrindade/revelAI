@@ -1,0 +1,48 @@
+name: website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/website/**"
+      - "packages/engine/docs/img/**"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/website-ci.yml"
+  pull_request:
+    paths:
+      - "packages/website/**"
+      - "packages/engine/docs/img/**"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/website-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @revelai/website typecheck
+      - name: Lint
+        run: pnpm --filter @revelai/website lint
+      # The build also syncs the figures out of packages/engine, so a missing
+      # or unreadable figure fails here rather than shipping a broken page.
+      - name: Build (static export)
+        run: pnpm --filter @revelai/website build
+      - name: Check the export is really static
+        run: |
+          test -f packages/website/out/index.html
+          test -f packages/website/out/honest-limitations/index.html
+          echo "static export contains $(find packages/website/out -name '*.html' | wc -l) pages"

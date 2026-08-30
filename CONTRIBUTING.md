@@ -9,8 +9,8 @@ This is a monorepo. Find the package you are working on:
 | Package | Language | Guide |
 | --- | --- | --- |
 | [`packages/engine`](packages/engine) | Python | [engine README](packages/engine/README.md) |
-| [`packages/website`](packages/website) | TypeScript (planned) | [website README](packages/website/README.md) |
-| [`packages/mcp-server`](packages/mcp-server) | Python (planned) | [MCP server README](packages/mcp-server/README.md) |
+| [`packages/mcp-server`](packages/mcp-server) | Python | [MCP server README](packages/mcp-server/README.md) |
+| [`packages/website`](packages/website) | TypeScript | [website README](packages/website/README.md) |
 
 ## Monorepo conventions
 
@@ -43,6 +43,29 @@ pytest -q
 ruff check .
 ruff format --check .
 ```
+
+## Development setup: MCP server
+
+```bash
+cd packages/mcp-server
+pip install -e ../engine -e ".[dev]"
+pytest -q
+```
+
+## Development setup: website
+
+From the repository root, so pnpm resolves the workspace:
+
+```bash
+pnpm install
+pnpm --filter @revelai/website dev
+pnpm --filter @revelai/website typecheck
+pnpm --filter @revelai/website lint
+pnpm --filter @revelai/website build
+```
+
+Running `pnpm <script>` from inside `packages/website` makes pnpm treat it as a
+standalone project and reinstall it. Use `--filter` from the root.
 
 ## Ground rules
 

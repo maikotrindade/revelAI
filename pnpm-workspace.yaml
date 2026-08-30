@@ -1,0 +1,10 @@
+# The JavaScript half of the monorepo. The engine and the MCP server are Python
+# and are not listed here; each has its own pyproject.toml.
+packages:
+  - "packages/website"
+
+# pnpm refuses to run a dependency's install scripts unless it is named here.
+# unrs-resolver is the native binary behind the ESLint import resolver, pulled
+# in by eslint-config-next, and it is the only thing in the tree that builds.
+allowBuilds:
+  unrs-resolver: true
