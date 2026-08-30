@@ -54,6 +54,10 @@ These are not style preferences. Breaking them breaks the product's promises.
    machine. A website that accepted uploads would contradict the thing the
    product is selling. The site must build to static files and have nowhere to
    send an image even in principle.
+
+   **Amended — see §11.** The `/run` page sends images to `127.0.0.1`, and only
+   there. The rule as written still holds: the *site* has nowhere to send an
+   image, because the only address it uses is the visitor's own computer.
 2. **No analytics that phone home by default**, and no third-party trackers. If
    you want usage numbers, use something self-hosted or nothing.
 3. **The honest limitations go on the front page**, not on a page nobody
@@ -193,7 +197,7 @@ measuring.
 | Crop accuracy vs synthetic ground truth | IoU 0.994–0.997 |
 | Angle error | under 0.03° |
 | Colour correction on a strongly yellowed print | grey deviation 71 → 7 |
-| Tests | 239, all offline |
+| Tests | 322, all offline |
 | Platforms | Linux, macOS, Windows × Python 3.10–3.13 |
 | Resamplings per photograph in `split` | exactly 1 |
 
@@ -248,5 +252,76 @@ that touch the website. Do not deploy from CI on pull requests.
 
 ## 10. Out of scope
 
-Running the engine in any form. Uploads. Accounts. A blog. A dashboard.
-Internationalisation — English only for now. Anything that needs a server.
+~~Running the engine in any form. Uploads.~~ — superseded by §11. Accounts. A
+blog. A dashboard. Internationalisation — English only for now. Anything that
+needs a server *of ours*.
+
+---
+
+## 11. Amendment: the `/run` page
+
+Added after the brief above was written, and it contradicts §4.1 and §10 as
+those were originally worded. The reasoning, since the brief asks for it to be
+written down.
+
+### What was asked for
+
+A page that lets somebody choose a folder, watches RevelAI process it, and hands
+back a zip of the results.
+
+### Why that is not simply a violation
+
+§4.1 exists to protect one thing: **family photographs stay on the owner's
+machine**. "No uploads, no backend" was the mechanism, not the goal. There is a
+second mechanism that serves the same goal exactly as well:
+
+- The site is still `output: 'export'`. There is still no server of ours, no
+  database, no upload endpoint, no account.
+- The `/run` page talks to `http://127.0.0.1:8765` and to nothing else. That is
+  the visitor's own computer, running `revelai serve`, which they started and
+  can stop.
+- The images are read by the same engine the CLI runs. Nothing crosses a
+  network. Nothing is retained: the server works in a temporary directory it
+  deletes when it stops.
+
+So the promise is kept, and the mechanism is one the visitor can verify —
+the network tab shows one host, and it is theirs.
+
+### What would have violated it
+
+Any of these, and none of them are here: an upload endpoint on our origin; a
+WASM build that processes photographs in a page we control the contents of; a
+"just try it, we'll delete it after" hosted mode; a backend field in the run
+API that a page could set to a hosted provider.
+
+That last one is the interesting case, and it is closed deliberately: the
+restoration backend is fixed by the flag `revelai serve` starts with, and the
+server rejects a request that tries to name one. Whether photographs are
+uploaded is not a decision a web page gets to make. Same for face restoration
+and colourisation, which need `--allow-generative` at startup.
+
+### What the page must keep doing
+
+- **Work with no server running.** That is the first visit for everybody, so it
+  is an instruction, not an error state.
+- **Refuse a bad folder before uploading anything**, and name every file that is
+  wrong. Server-side, because the server is the thing making the promise; the
+  page asks rather than deciding, so there is one set of rules rather than two.
+- **Say plainly, on the page, where the images go.** §5 of this brief says not to
+  overclaim; the corollary is not to under-explain something that sounds
+  alarming. "A website that runs software on your folder" is a sentence that
+  should make somebody suspicious, and the page says so in those words.
+- **Not become the recommended route.** The CLI is more capable and has no size
+  limits. The page links to it and says so.
+
+### Consequences for §7
+
+The JS budget is per page, and the landing page is unaffected — the run code is
+in its own chunk. Measured after this change: **117.8 kB** on the landing page,
+**123.6 kB** on `/run`, both against the 125 kB budget.
+
+`/run` is the one part of the site that does not work with JavaScript disabled,
+which §7 otherwise forbids. Driving a run needs a live progress connection;
+there is no static form that does it. The `<noscript>` block says so and gives
+the two commands that do the same job in a terminal, and every word of
+explanation on the page is in the static markup.

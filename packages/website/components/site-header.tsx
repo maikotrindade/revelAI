@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/#privacy", label: "Privacy" },
   { href: "/honest-limitations/", label: "Limitations" },
   { href: "/#install", label: "Install" },
+  { href: "/run/", label: "Run it" },
 ];
 
 export function SiteHeader() {

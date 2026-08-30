@@ -32,6 +32,11 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/run/" className="rounded underline underline-offset-4">
+                  Run it
+                </Link>
+              </li>
+              <li>
                 <a
                   href={`${REPO}/blob/main/LICENSE`}
                   className="rounded underline underline-offset-4"

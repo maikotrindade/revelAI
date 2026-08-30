@@ -338,13 +338,23 @@ def run_enhance(
                 )
         return photo
 
-    if jobs > 1:
-        with ThreadPoolExecutor(max_workers=jobs) as pool:
-            processed = list(pool.map(process, inputs))
-    else:
-        processed = [process(source) for source in inputs]
+    def processed():
+        """Yield restored photographs one at a time, in input order.
 
-    for photo in processed:
+        Lazily, for the same reason as in ``run_split``: ``Executor.map``
+        submits every task immediately either way, so the parallelism is
+        unchanged, but ``on_photo`` then fires as each photograph finishes
+        instead of all at once at the end. That is what makes a live progress
+        report possible for a caller that wants one.
+        """
+        if jobs > 1:
+            with ThreadPoolExecutor(max_workers=jobs) as pool:
+                yield from pool.map(process, inputs)
+        else:
+            for source in inputs:
+                yield process(source)
+
+    for photo in processed():
         report.photos.append(photo)
         if on_photo:
             on_photo(photo)

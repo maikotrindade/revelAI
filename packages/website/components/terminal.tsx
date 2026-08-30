@@ -27,7 +27,14 @@ export function Terminal({
           <span className="ml-2 font-mono text-xs text-paper-300/60">{title}</span>
         </div>
       ) : null}
-      <pre className="overflow-x-auto px-4 py-4 font-mono text-[13px] leading-relaxed">
+      {/* tabIndex: these lines scroll horizontally on a narrow screen, and a
+          scrollable region has to be reachable from the keyboard. */}
+      <pre
+        tabIndex={0}
+        role="group"
+        aria-label={title ? `${title} output` : "Terminal output"}
+        className="overflow-x-auto px-4 py-4 font-mono text-[13px] leading-relaxed"
+      >
         <code>
           {lines.map((line, i) => (
             <span

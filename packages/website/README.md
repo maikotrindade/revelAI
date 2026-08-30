@@ -16,6 +16,40 @@ so this one builds to static files with `output: "export"` and has **nowhere to
 send an image even in principle**. No uploads, no backend, no accounts, no
 analytics, no third-party trackers.
 
+## …and it still has a working run button
+
+[`/run`](https://maikotrindade.com/revelAI/run/) lets somebody choose a folder
+of album pages, watch each one being separated, and download the photographs as
+a zip — without weakening any of the above.
+
+The page talks to `http://127.0.0.1:8765` and to nothing else. That is the
+visitor's own computer, running [`revelai serve`](../engine/README.md#run-it-from-a-browser-revelai-serve),
+which they started and can stop with Ctrl+C. There is no server of ours in the
+path; the images are read by the same engine the CLI runs, out of a temporary
+directory that is deleted when the server stops.
+
+```bash
+pip install revelai
+revelai serve --open
+```
+
+Three properties are load-bearing and should not be traded away:
+
+| | |
+| --- | --- |
+| **One host** | The only origin the page ever contacts is loopback. Verifiable in the network tab, which is the point. |
+| **The folder is judged by the server** | The page sends a listing and asks. Duplicating the rules in TypeScript would give two sets of rules to be wrong about, and the server's are the ones that matter. |
+| **The page cannot pick a backend** | Whether photographs are uploaded to a third party is set by the flag `revelai serve` starts with. A request naming one is rejected. Same for face restoration and colourisation. |
+
+This deviates from [PROMPT.md](PROMPT.md) §4.1 and §10 as originally written.
+The reasoning is recorded in [§11 of the same file](PROMPT.md#11-amendment-the-run-page),
+including what *would* have been a violation.
+
+`/run` is also the one page that needs JavaScript. Driving a live run has no
+static equivalent; the `<noscript>` block says so and gives the two commands
+that do the same job in a terminal, and all of the page's explanatory content is
+in the static markup either way.
+
 ## Develop
 
 From the repository root, so pnpm resolves the workspace:
@@ -83,17 +117,34 @@ terminal block was dark-on-dark because it used the page's usual muted colour on
 a panel that is dark in both themes, and the horizontally scrollable command
 blocks were not reachable from the keyboard.
 
+`/run` was audited the same way, in each of its states — disconnected, connected,
+folder refused, folder accepted, running, finished — across the themes. **Zero
+violations.** Three problems were found and fixed: the folder `<input>` was
+`sr-only` rather than hidden, so screen reader users met the same action twice;
+the terminal block's `<pre>` was still not keyboard-reachable (the earlier fix
+had only reached the command blocks); and small muted text at 60% opacity failed
+contrast in light mode.
+
 To repeat the audit: build, serve `out/`, then load `axe.min.js` from
 `node_modules/axe-core` in the page and call `axe.run`.
+
+> One trap worth knowing: a browser tab that is not compositing never advances a
+> CSS transition, so `getComputedStyle` returns the colour the transition
+> started from and axe reports contrast failures that do not exist. Disable
+> transitions before auditing a theme switch, or audit in a visible window.
 
 ## Budget
 
 | | |
 | --- | --- |
-| JS on the landing page | **117.7 kB gzipped** (budget: 125 kB) |
+| JS on the landing page | **117.8 kB gzipped** (budget: 125 kB) |
+| JS on `/run` | **123.6 kB gzipped** (budget: 125 kB) |
 | of which Next + React runtime | ~98 kB |
-| CSS | 4.3 kB gzipped |
-| HTML | 18.2 kB gzipped |
+| CSS | 5.6 kB gzipped |
+| HTML | 18.7 kB landing, 10.6 kB `/run` |
+
+The run page's own code is 5.8 kB gzipped over the shared runtime, and it is a
+separate chunk: adding it did not change what the landing page downloads.
 
 The 38.5 kB polyfill bundle is marked `noModule` and is not fetched by a modern
 browser. The brief originally set a 100 kB budget, which is not reachable with

@@ -54,6 +54,14 @@ revelai enhance ./photos -o ./photos-restored --compare-dir ./compare
 revelai run ./album-pages --out-split ./photos --out-enhanced ./photos-restored
 ```
 
+Or drive the same two stages from a page in your own browser, with the
+photographs still never leaving this machine — see
+[Run it from a browser](#run-it-from-a-browser-revelai-serve):
+
+```bash
+revelai serve --open
+```
+
 Try it without committing to anything:
 
 ```bash
@@ -238,6 +246,63 @@ with no display this warns and falls back to automatic mode; it does not crash.
 
 ---
 
+## Run it from a browser: `revelai serve`
+
+Not everybody who owns a shoebox of album pages lives in a terminal, and that
+should not be the thing that decides whether their photographs get digitised.
+
+```bash
+revelai serve --open
+```
+
+That starts a small HTTP server on `127.0.0.1:8765` and opens the run page at
+[maikotrindade.com/revelAI/run](https://maikotrindade.com/revelAI/run/). You
+choose a folder, watch each page being separated, and download the results as a
+zip. Ctrl+C stops it, and everything it wrote is deleted when it does.
+
+**The photographs still never leave your machine.** That page is a static file
+with no server of its own — it cannot receive an image, because there is nowhere
+for one to go. What it does is drive the process you just started. Your images
+go to `127.0.0.1`, which is this computer and is not reachable from your network
+let alone the internet, and they are read by the same engine `revelai split`
+uses.
+
+Three things are worth knowing about it.
+
+**The folder is checked before anything moves.** The page sends a listing —
+names and sizes — and the server says whether the folder is acceptable. A folder
+holding a PDF, or a subfolder, or two files with one name, is refused with the
+name of every file that is wrong, before a byte has been uploaded. Then each
+file is checked again as it arrives, by decoding it: a name is a claim, and only
+the decoder establishes that `holiday.jpg` is a photograph rather than a
+spreadsheet. `.DS_Store` and its relatives are skipped rather than refused.
+
+**Two decisions belong to whoever starts the server, and no request can change
+them.** The restoration backend is fixed by `--backend` at startup, so no web
+page can arrange for your photographs to be uploaded to a third party. Face
+restoration and colourisation are refused outright unless you passed
+`--allow-generative`, because they reconstruct and invent detail — see
+[Honest limitations](#honest-limitations).
+
+**It is a local appliance, not a service.** It binds to loopback; it checks the
+`Host` header on every request, so a hostname pointed at `127.0.0.1` cannot be
+used to make some other site count as same-origin; and it only accepts requests
+from the run page or from `localhost`. Add another with `--allow-origin`.
+
+For a machine with no internet at all, point it at a built copy of the site and
+it serves the page itself:
+
+```bash
+revelai serve --ui-dir ./packages/website/out
+```
+
+The zip holds `photo_XXXXXXXX.png` files and nothing else, which is the same
+[output rule](#output-rules) the CLI keeps. Everything the browser can ask for,
+`split` and `enhance` already do, with more options and without a size limit —
+if you are comfortable in a terminal, stay there.
+
+---
+
 ## How to photograph album pages
 
 The quality of the input decides everything downstream. Five minutes of care
@@ -273,6 +338,10 @@ These are family photographs. That is not a footnote, it is a requirement.
 - **`--verify` and `--describe` also send images** — to Anthropic, for the
   question being asked. They are off unless you ask for them. Only a downscaled
   copy is sent; the file on disk is never modified.
+- **`revelai serve` binds to the loopback interface**, so the browser page that
+  drives it is talking to this computer and nothing else. Uploaded pages and
+  results live in a temporary folder that is deleted when the server stops. The
+  backend is fixed when it starts, so no page can arrange an upload.
 - Nothing is ever uploaded during a `--dry-run` that does not use those flags,
   and no test in this repository touches the network.
 
@@ -406,6 +475,23 @@ These are strict, and they are what makes the output safe to point a script at.
 
 Both stages in sequence.
 
+### `revelai serve [options]`
+
+A local HTTP server so the two stages can be driven from a browser. Loopback
+only; see [Run it from a browser](#run-it-from-a-browser-revelai-serve).
+
+| Flag | Effect |
+| --- | --- |
+| `--host ADDR` | interface to bind (default `127.0.0.1`, this machine only) |
+| `--port N` | port, or `0` to let the system choose (default `8765`) |
+| `--open` | open the run page in your browser |
+| `--ui-dir DIR` | serve a built copy of the run page from here, for offline use |
+| `--allow-origin URL` | an extra browser origin allowed to drive it (repeatable) |
+| `--backend NAME` | `local` (default) or a hosted provider — not selectable per request |
+| `--allow-generative` | permit face restoration and colourisation, which invent detail |
+| `--max-files N` / `--max-mb N` | per-run limits (default `500` / `4096`) |
+| `--jobs N`, `-v` | |
+
 ---
 
 ## Prior art
@@ -468,7 +554,7 @@ Everything in this package is self-contained: its own `pyproject.toml`, its own
 tests, its own figures. Nothing outside `packages/engine/` is needed to build,
 test or run it.
 
-229 tests, all offline: no test touches the network or needs an API key. Every
+322 tests, all offline: no test touches the network or needs an API key. Every
 image in the suite is generated by `tests/synth.py`, which builds album pages
 from a specification and carries every ground-truth corner through the placement
 transform analytically, so accuracy is measured against the rectangle that is

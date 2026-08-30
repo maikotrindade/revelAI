@@ -42,6 +42,13 @@ export default function Home() {
               </div>
               <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-ink-700/80 dark:text-paper-300/80">
                 <Link
+                  href="/run/"
+                  className="inline-flex items-center gap-1.5 rounded font-medium text-ink-900 underline underline-offset-4 dark:text-paper-100"
+                >
+                  Run it from your browser{" "}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <Link
                   href="/#how-it-works"
                   className="inline-flex items-center gap-1.5 rounded font-medium text-ink-900 underline underline-offset-4 dark:text-paper-100"
                 >
@@ -468,6 +475,24 @@ export default function Home() {
               .
             </p>
           </div>
+        </div>
+
+        <div className="mt-8 rounded-xl border border-paper-200 bg-paper-100/60 p-6 dark:border-ink-800 dark:bg-ink-900/40">
+          <h3 className="font-semibold text-ink-900 dark:text-paper-100">
+            Would rather not use a terminal?
+          </h3>
+          <p className="mt-2 max-w-prose text-ink-700/90 dark:text-paper-300/90">
+            <code className="font-mono">revelai serve --open</code> puts the same
+            two stages behind a page you can point at a folder. It runs on your
+            machine and the photographs still go nowhere —{" "}
+            <Link
+              href="/run/"
+              className="rounded font-medium text-ink-900 underline underline-offset-4 dark:text-paper-100"
+            >
+              the run page explains exactly what talks to what
+            </Link>
+            .
+          </p>
         </div>
       </Section>
 
