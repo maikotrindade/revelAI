@@ -8,6 +8,14 @@
 #   docker build -t revelai packages/engine
 #   docker run --rm -v "$PWD:/work" ghcr.io/maikotrindade/revelai split ./pages
 #
+# `revelai serve` works too, but note what changes inside a container: the
+# server has to bind the container's own interface rather than its loopback,
+# and the port is then published back to the *host's* loopback so it is still
+# only reachable from the machine you are sitting at.
+#
+#   docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/maikotrindade/revelai \
+#       serve --host 0.0.0.0
+#
 # The build context is this package alone, so a contributor can build the image
 # without the rest of the monorepo. The licence therefore travels as an OCI
 # label rather than as a copied file: the LICENSE lives at the repository root
@@ -41,6 +49,10 @@ RUN python -m pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 RUN useradd --create-home --uid 1000 revelai
 USER revelai
 WORKDIR /work
+
+# The default `revelai serve` port. Publishing it is opt-in, and the comment at
+# the top of this file explains why it should be published to 127.0.0.1 only.
+EXPOSE 8765
 
 ENTRYPOINT ["revelai"]
 CMD ["--help"]
