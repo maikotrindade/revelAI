@@ -148,15 +148,30 @@ deviation of a strongly cast print from **71 to 7** — no model involved.
 | `--denoise` | OpenCV non-local means | Real-ESRGAN | ~US$0.004 |
 | `--dust` | median-difference detection + inpaint | *(classical is better; not offered)* | free |
 | `--upscale` | ONNX super-resolution from the model cache | Real-ESRGAN | ~US$0.004 |
-| `--faces` | ONNX model from the cache | GFPGAN | ~US$0.006 |
-| `--colorize` | ONNX model from the cache | DeOldify | ~US$0.012 |
+| `--faces` | bring your own ONNX model | GFPGAN | ~US$0.006 |
+| `--colorize` | bring your own ONNX model | DeOldify | ~US$0.012 |
 
-The local backend's classical operations need no model at all. The others load a
-model from `~/.cache/revelai/models`, downloaded on demand, and report
-themselves unavailable until one is there — never a silent no-op. No model is
-hardwired: each is a registry entry in
-`src/revelai/enhance/backends/models.py`, and swapping one for a better model is
-an edit to that table.
+The local backend's classical operations need no model at all, and they are what
+the default run uses.
+
+The model-backed ones load ONNX from `~/.cache/revelai/models` and report
+themselves unavailable until a model is there — never a silent no-op. **One
+model ships in the registry today**, a small super-resolution network for
+`--upscale`; `--faces` and `--colorize` have no registered local model yet, and
+say so with the environment variable to point at your own:
+
+```
+$ revelai enhance ./photos -o ./out --faces
+  operations skipped
+      faces: RevelAI has no local model registered for faces. Point at your own
+      ONNX model with REVELAI_MODEL_FACES, or use --backend with a hosted provider.
+```
+
+No model is hardwired anywhere. Each is a registry entry in
+[`models.py`](src/revelai/enhance/backends/models.py) paired with a runner that
+knows how to feed it, so swapping one for a better model is an edit to that
+table rather than to the restoration code — which matters, because the models
+worth using will change faster than this tool will.
 
 ---
 

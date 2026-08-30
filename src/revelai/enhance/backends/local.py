@@ -40,13 +40,23 @@ class LocalBackend(EnhancerBackend):
         return available
 
     def unavailable_reason(self, operation: str) -> str:
-        if operation in ("faces", "colorize", "upscale"):
+        """Say what is missing and what the user can actually do about it."""
+        if operation not in ("faces", "colorize", "upscale"):
+            return super().unavailable_reason(operation)
+
+        registered = self.models.specs(operation)
+        variable = f"REVELAI_MODEL_{operation.upper()}"
+        if registered:
             return (
-                f"the local backend needs a model for {operation}, and none is in the "
-                f"cache. Fetch one with 'revelai models fetch {operation}', or use "
-                f"--backend with a hosted provider."
+                f"the local backend needs a model for {operation} and none is cached. "
+                f"Download {registered[0].name} from {registered[0].url} into "
+                f"{self.models.directory}, point at your own with {variable}, "
+                f"or use --backend with a hosted provider."
             )
-        return super().unavailable_reason(operation)
+        return (
+            f"RevelAI has no local model registered for {operation}. Point at your own "
+            f"ONNX model with {variable}, or use --backend with a hosted provider."
+        )
 
     # -- classical ---------------------------------------------------------
 
