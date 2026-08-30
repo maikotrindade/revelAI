@@ -17,7 +17,7 @@ export const MEASURED = {
   angleErrorDegrees: 0.03,
   greyDeviationBefore: 71,
   greyDeviationAfter: 7,
-  tests: 239,
+  tests: 322,
   resamplingsPerPhoto: 1,
   pythonVersions: "3.10–3.13",
   platforms: "Linux, macOS and Windows",
