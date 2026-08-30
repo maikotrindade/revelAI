@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import synth
 from conftest import angle_error, best_match, polygon_iou, split_cached
 from revelai.split import SplitOptions, split_page  # noqa: F401
 from revelai.split.refine import RotRect, refine_rect
@@ -167,11 +168,81 @@ class TestOverlappingPhotographs:
         assert result.notes, "the run summary must say what was wrong with the page"
 
 
+class TestPhotographsWithInternalStructure:
+    """A real photograph has long straight lines inside it. A horizon is one.
+
+    Every other fixture in this file is built from random blobs, which have no
+    long straight internal edges at all. That made the suite blind to a detector
+    that treated any long straight line as a photograph border and cut
+    landscapes in half at their own horizon. This page catches that.
+    """
+
+    def test_a_page_of_landscapes_yields_one_crop_per_photograph(self, scenic_page):
+        result = split_cached(scenic_page.image, EXACT)
+        assert len(result.detections) == 4, (
+            f"expected 4 photographs, got {len(result.detections)}; "
+            f"a photograph was probably cut at its horizon"
+        )
+        _assert_all_matched(scenic_page, result)
+
+    def test_no_crop_is_much_shorter_than_the_photograph(self, scenic_page):
+        """A horizon cut halves the height; the shape is the giveaway."""
+        result = split_cached(scenic_page.image, EXACT)
+        expected = min(min(p.w, p.h) for p in scenic_page.clean_photos)
+        for detection in result.detections:
+            assert min(detection.rect.w, detection.rect.h) > expected * 0.75
+
+    @pytest.mark.parametrize("seed", [200, 201, 202])
+    def test_it_holds_across_seeds(self, seed):
+        """Detection must not be tuned to one particular random page."""
+        page = synth.scenic_page(seed=seed)
+        result = split_page(page.image, EXACT)
+        assert len(result.detections) == 4
+        detected = [d.rect.corners() for d in result.detections]
+        for truth in page.clean_photos:
+            _, score = best_match(truth.corners, detected)
+            assert score >= IOU_THRESHOLD
+
+
 class TestEmptyPage:
     def test_a_page_with_no_photographs_yields_nothing(self, empty_page):
         result = split_cached(empty_page.image, EXACT)
         assert result.detections == []
         assert result.needs_review, "a page with no detections must be flagged"
+
+
+class TestRotRectOrientation:
+    """A rotated rectangle has four equivalent descriptions; one is stored.
+
+    Which one matters: the crop is warped starting from the rectangle's own
+    first corner, so the wrong description turns a landscape print on its side.
+    """
+
+    def test_the_angle_is_folded_into_a_quarter_turn(self):
+        for angle in (-180.0, -90.0, -46.0, 0.0, 44.0, 90.0, 137.0, 271.0):
+            assert -45.0 <= RotRect(0, 0, 30, 20, angle).angle < 45.0
+
+    def test_a_swapped_description_is_normalised_back(self):
+        upright = RotRect(100, 100, 620, 460, 0.0)
+        swapped = RotRect(100, 100, 460, 620, 90.0)
+        assert (swapped.w, swapped.h) == (upright.w, upright.h)
+        assert swapped.angle == pytest.approx(upright.angle)
+
+    def test_normalising_does_not_move_the_rectangle(self):
+        a = sorted(map(tuple, RotRect(50, 60, 460, 620, 90.0).corners().round(6)))
+        b = sorted(map(tuple, RotRect(50, 60, 620, 460, 0.0).corners().round(6)))
+        assert a == b
+
+    def test_a_landscape_print_produces_a_landscape_crop(self, scenic_page):
+        """End to end: the crop comes out the way the print sits on the page."""
+        from revelai.split import crop_detection
+
+        result = split_cached(scenic_page.image, EXACT)
+        for detection in result.detections:
+            crop = crop_detection(scenic_page.image, detection)
+            assert crop.shape[1] > crop.shape[0], (
+                "a landscape photograph came out of the crop on its side"
+            )
 
 
 class TestRefinement:

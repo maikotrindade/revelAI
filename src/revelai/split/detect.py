@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
-from revelai.split.refine import PreparedImage, RotRect, prepare_image, score_lines
+from revelai.split.refine import RotRect
 
 __all__ = ["DetectParams", "PageRegion", "isolate_page", "find_candidates"]
 
@@ -64,25 +64,6 @@ class DetectParams:
     min_part_fraction: float = 0.25
     #: The parts must between them account for this much of the merged blob.
     merge_coverage: float = 0.65
-    #: An internal border this strong, relative to the candidate's own outer
-    #: borders, means the candidate is two photographs rather than one. On the
-    #: test fixtures a single photograph never exceeds 0.18, however busy its
-    #: content, while a genuine pair of touching prints measures 0.41 and above.
-    split_ratio: float = 0.30
-    #: The internal border must also stand out from the rest of the candidate's
-    #: interior: a single photograph's interior profile peaks at about 10 times
-    #: its own median, a real border between two prints at 29 and 61.
-    #:
-    #: It does more than reject false splits. Where two prints overlap rather
-    #: than merely touch, the union of the two is an L shape whose own outer
-    #: edges are poorly defined, and a line running the length of the *short*
-    #: axis can then out-score them while cutting straight across both prints.
-    #: That spurious cut is broad and unremarkable against the rest of the
-    #: profile; requiring a narrow spike is what keeps the split on the axis
-    #: that actually separates the two photographs.
-    split_prominence: float = 15.0
-    #: How many times a candidate may be split. Two allows a row of three.
-    max_splits: int = 2
 
 
 @dataclass
@@ -449,85 +430,6 @@ def _suppress_overlaps(
     return kept
 
 
-def _split_on_internal_border(
-    rect: RotRect, prepared: PreparedImage, params: DetectParams, depth: int = 0
-) -> list[RotRect]:
-    """Split a candidate that has a photograph border running through it.
-
-    Photographs mounted edge to edge, with no paper between them, are found as
-    one blob by every region-based method: there is nothing between them to
-    segment on, only a faint shadow line. Region growing cannot see it and the
-    enclosed-edge strategy only recovers the halves when their content happens
-    to be quiet enough not to fragment the interior.
-
-    The line integral can see it. A real border between two prints runs the full
-    height of the blob and scores about as strongly as the blob's own outer
-    edges; a feature inside a photograph, however contrasty, does not run the
-    whole way. So the test is relative: sweep a line across the candidate, and
-    if the best internal line reaches a fair fraction of the candidate's own
-    outer borders, the candidate is two photographs and is cut there.
-    """
-    if depth >= params.max_splits:
-        return [rect]
-
-    u, v = rect.axes
-    centre = rect.centre
-    best: tuple[float, float, np.ndarray, float] | None = None
-
-    for normal, tangent, extent, span in ((u, v, rect.w, rect.h), (v, u, rect.h, rect.w)):
-        if extent < 40 or span < 20:
-            continue
-        # An honest split leaves a usable photograph on each side.
-        reach = 0.35 * extent
-        offsets = np.arange(-reach, reach + 1e-6, 1.0)
-        if len(offsets) < 5:
-            continue
-        internal = score_lines(prepared, centre, tangent, normal, span, offsets)
-        outer = score_lines(
-            prepared, centre, tangent, normal, span, np.array([-extent / 2.0, extent / 2.0])
-        )
-        reference = float(outer.mean())
-        if reference <= 1e-6:
-            continue
-        index = int(np.argmax(internal))
-        peak = float(internal[index])
-        ratio = peak / reference
-        # Photographic content gives a busy interior profile with many
-        # comparable peaks; a border gives one narrow spike. Requiring the peak
-        # to tower over the candidate's own median rejects the former.
-        prominence = peak / max(float(np.median(internal)), 1e-6)
-        if prominence < params.split_prominence:
-            continue
-        if best is None or ratio > best[0]:
-            best = (ratio, float(offsets[index]), normal, extent)
-
-    if best is None or best[0] < params.split_ratio:
-        return [rect]
-
-    _, cut, normal, extent = best
-    first = extent / 2.0 + cut
-    second = extent / 2.0 - cut
-    if min(first, second) < 20:
-        return [rect]
-
-    parts: list[RotRect] = []
-    for sign, size in ((-1.0, first), (1.0, second)):
-        shift = cut + sign * size / 2.0
-        middle = centre + normal * shift
-        if normal is u:
-            part = RotRect(middle[0], middle[1], size, rect.h, rect.angle)
-        else:
-            part = RotRect(middle[0], middle[1], rect.w, size, rect.angle)
-        if part.aspect > params.max_aspect:
-            return [rect]
-        parts.append(part)
-
-    result: list[RotRect] = []
-    for part in parts:
-        result.extend(_split_on_internal_border(part, prepared, params, depth + 1))
-    return result
-
-
 def _containment(inner: RotRect, outer: RotRect) -> float:
     """Fraction of ``inner`` that lies inside ``outer``."""
     area, _ = cv2.intersectConvexConvex(
@@ -630,20 +532,6 @@ def find_candidates(
     # overlaps each of its halves by about 0.5, and must survive to this point
     # so that _drop_merged can recognise it for what it is.
     viable = _suppress_overlaps(viable, 0.60)
-
-    # Only now, on candidates that are already the right size and shape to be
-    # photographs, look for a border running through one of them. Splitting
-    # before this point would happily cut the page-sized ring of a decorated
-    # album frame into two convincing half-pages.
-    prepared = prepare_image(working)
-    with_parts: list[tuple[RotRect, float]] = []
-    for rect, fill in viable:
-        with_parts.append((rect, fill))
-        parts = _split_on_internal_border(rect, prepared, params)
-        if len(parts) > 1:
-            with_parts.extend((part, fill) for part in parts)
-    viable = with_parts
-
     viable = _drop_merged(viable, params)
     viable = _drop_contained(viable, params)
     kept = _suppress_overlaps(viable, params.suppress_iou)

@@ -35,7 +35,6 @@ __all__ = [
     "PreparedImage",
     "prepare_image",
     "refine_rect",
-    "score_lines",
 ]
 
 # Defaults from the specification. They are conservative on purpose: a small
@@ -61,11 +60,29 @@ class RotRect:
     angle: float
 
     def __post_init__(self) -> None:
+        # A rotated rectangle has four equivalent descriptions: rotating by 90
+        # degrees and swapping the sides gives the same rectangle back. Which
+        # one is stored is not cosmetic, because the crop is warped starting
+        # from this rectangle's own first corner, so the description decides
+        # whether a landscape print comes out landscape or on its side.
+        #
+        # Folding the angle into [-45, 45) picks the description whose axes are
+        # closest to the page's own. Album pages are photographed roughly
+        # upright and prints are mounted roughly square to the page, so that is
+        # the one that keeps each photograph the way round it sits on the page.
+        # Which way up the *scene* is remains a question only --auto-orient can
+        # answer; this is about not adding a quarter turn of our own.
+        width, height, angle = float(self.w), float(self.h), float(self.angle)
+        turns = math.floor((angle + 45.0) / 90.0)
+        if turns:
+            angle -= 90.0 * turns
+            if turns % 2:
+                width, height = height, width
         object.__setattr__(self, "cx", float(self.cx))
         object.__setattr__(self, "cy", float(self.cy))
-        object.__setattr__(self, "w", float(self.w))
-        object.__setattr__(self, "h", float(self.h))
-        object.__setattr__(self, "angle", float(self.angle))
+        object.__setattr__(self, "w", width)
+        object.__setattr__(self, "h", height)
+        object.__setattr__(self, "angle", angle)
 
     @property
     def axes(self) -> tuple[np.ndarray, np.ndarray]:
@@ -439,22 +456,3 @@ def refine_rect(
         score=total,
         edges=fits,
     )
-
-
-def score_lines(
-    prepared: PreparedImage,
-    base: np.ndarray,
-    tangent: np.ndarray,
-    normal: np.ndarray,
-    length: float,
-    offsets: np.ndarray,
-) -> np.ndarray:
-    """Line-integral score for a family of parallel lines.
-
-    Same measurement as the edge search above, exposed so that detection can ask
-    a different question with it: not "where is this edge?" but "is there a
-    border running through the middle of this candidate?". That is what tells
-    two photographs mounted edge to edge apart from one wide photograph.
-    """
-    scores, _ = _score_edge(prepared, base, tangent, normal, length, np.asarray(offsets, float))
-    return scores

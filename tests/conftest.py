@@ -98,6 +98,11 @@ def empty_page() -> synth.SyntheticPage:
     return synth.empty_page()
 
 
+@pytest.fixture(scope="session")
+def scenic_page() -> synth.SyntheticPage:
+    return synth.scenic_page()
+
+
 _SPLIT_CACHE: dict = {}
 
 

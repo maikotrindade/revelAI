@@ -31,6 +31,8 @@ __all__ = [
     "empty_page",
     "single_photo_page",
     "tiny_page",
+    "scenic_page",
+    "scene_content",
     "touching_pair_page",
     "yellow_cast_image",
     "write_pages",
@@ -243,6 +245,82 @@ def touching_pair_page(seed: int = 1) -> SyntheticPage:
 def single_photo_page(seed: int = 2) -> SyntheticPage:
     """One photograph, used for exact geometry assertions."""
     return build_page([PhotoSpec(750, 1050, 900, 640, 2.2, (105, 95, 120))], seed=seed)
+
+
+def scene_content(width: int, height: int, seed: int) -> np.ndarray:
+    """A synthetic image that behaves like a real photograph.
+
+    The blob fixtures above are good at exercising geometry but not at
+    exercising judgement: a field of random circles has no long straight lines
+    inside it. A real family photograph usually does - a horizon, a roofline,
+    the edge of a table - and a detector that treats any long straight line as a
+    photograph border will happily cut a landscape in half at the horizon.
+
+    So this renders a sky, a ground, a sun and a few silhouettes: no faces, no
+    real people, and one strong horizontal edge running the full width.
+    """
+    rng = np.random.default_rng(seed)
+    image = np.zeros((height, width, 3), np.float32)
+
+    horizon = int(height * rng.uniform(0.55, 0.7))
+    sky_top = np.array(rng.uniform([150, 110, 70], [210, 170, 120]))
+    sky_bottom = np.array(rng.uniform([220, 200, 170], [250, 235, 215]))
+    ramp = np.linspace(0.0, 1.0, max(horizon, 1))[:, None]
+    image[:horizon] = (sky_top * (1 - ramp) + sky_bottom * ramp)[:, None, :]
+
+    ground_near = np.array(rng.uniform([40, 70, 60], [80, 110, 95]))
+    ground_far = np.array(rng.uniform([90, 120, 105], [140, 165, 150]))
+    ramp = np.linspace(0.0, 1.0, max(height - horizon, 1))[:, None]
+    image[horizon:] = (ground_far * (1 - ramp) + ground_near * ramp)[:, None, :]
+
+    cv2.circle(
+        image,
+        (int(rng.uniform(0.15, 0.85) * width), int(rng.uniform(0.1, 0.5) * horizon)),
+        int(min(width, height) * 0.07),
+        (215, 240, 255),
+        -1,
+    )
+    image = cv2.GaussianBlur(image, (0, 0), min(width, height) * 0.02)
+
+    for _ in range(int(rng.integers(2, 5))):
+        x = int(rng.uniform(0.08, 0.92) * width)
+        h = int(rng.uniform(0.12, 0.3) * height)
+        w = max(2, int(h * rng.uniform(0.10, 0.22)))
+        tone = tuple(float(v) for v in rng.uniform([30, 40, 35], [70, 85, 75]))
+        cv2.rectangle(image, (x - w // 2, horizon - h), (x + w // 2, horizon), tone, -1)
+        cv2.circle(image, (x, horizon - h), int(w * rng.uniform(0.9, 1.6)), tone, -1)
+
+    image = cv2.GaussianBlur(image, (0, 0), 1.2)
+    image += rng.standard_normal(image.shape, dtype=np.float32) * 3.0
+    return np.clip(image, 0, 255).astype(np.uint8)
+
+
+def scenic_page(seed: int = 200, decorated_border: bool = True) -> SyntheticPage:
+    """Four photograph-like scenes on a page, each with a horizon across it.
+
+    This is the page that caught the detector cutting photographs in half at
+    their own horizons. Keep it in the suite.
+    """
+    specs = [
+        PhotoSpec(430, 430, 620, 460, -2.4, (120, 90, 70)),
+        PhotoSpec(1080, 440, 560, 470, 1.7, (80, 110, 140)),
+        PhotoSpec(430, 1120, 600, 520, 0.8, (95, 120, 105)),
+        PhotoSpec(1070, 1140, 580, 500, -1.3, (140, 100, 110)),
+    ]
+    page = build_page(specs, decorated_border=decorated_border, seed=seed)
+
+    # Repaint each rectangle with a scene, keeping the ground truth geometry
+    # exactly as build_page computed it.
+    for index, spec in enumerate(page.photos):
+        w, h = int(round(spec.w)), int(round(spec.h))
+        content = scene_content(w, h, seed + index)
+        source = np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], np.float32)
+        transform = cv2.getPerspectiveTransform(source, spec.corners.astype(np.float32))
+        size = (page.image.shape[1], page.image.shape[0])
+        warped = cv2.warpPerspective(content, transform, size)
+        mask = cv2.warpPerspective(np.full((h, w), 255, np.uint8), transform, size)
+        page.image[mask > 127] = warped[mask > 127]
+    return page
 
 
 def tiny_page(seed: int = 6, photos: int = 2) -> SyntheticPage:
