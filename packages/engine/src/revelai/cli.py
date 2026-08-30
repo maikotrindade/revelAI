@@ -1,9 +1,16 @@
 """Command line interface.
 
-Three commands. ``split`` turns photographs of album pages into individual
+Four commands. ``split`` turns photographs of album pages into individual
 photographs. ``enhance`` restores photographs that have already been separated.
 ``run`` does both in sequence. The two stages are independent: ``split`` never
 depends on ``enhance``, and either can be run on its own, in any order.
+
+``serve`` is the odd one out. It starts a small HTTP server on the loopback
+interface so that the same two stages can be driven from a page in your own
+browser. It processes nothing by itself and decides nothing the other three
+commands would not; what it adds is a way to use RevelAI without a terminal,
+without giving up the property that makes RevelAI worth using - that the
+photographs stay on the machine they started on.
 """
 
 from __future__ import annotations
@@ -204,6 +211,64 @@ def _add_enhance_arguments(parser: argparse.ArgumentParser, *, output_flag: bool
     )
 
 
+def _add_serve_arguments(parser: argparse.ArgumentParser) -> None:
+    from revelai.server.config import DEFAULT_PORT
+
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        metavar="ADDR",
+        help="interface to bind (default: 127.0.0.1, this machine only)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        metavar="N",
+        help=f"port to listen on, or 0 to let the system choose (default: {DEFAULT_PORT})",
+    )
+    parser.add_argument(
+        "--allow-origin",
+        action="append",
+        default=None,
+        metavar="URL",
+        help="an extra browser origin allowed to drive this server (repeatable)",
+    )
+    parser.add_argument(
+        "--ui-dir",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="serve a built copy of the run page from here, for offline use",
+    )
+    parser.add_argument(
+        "--backend",
+        default="local",
+        metavar="NAME",
+        help="local (default, nothing leaves your machine) or a hosted provider",
+    )
+    parser.add_argument(
+        "--allow-generative",
+        action="store_true",
+        help="permit face restoration and colourisation, which invent detail",
+    )
+    parser.add_argument(
+        "--max-files", type=int, default=500, metavar="N", help="pages per run (default: 500)"
+    )
+    parser.add_argument(
+        "--max-mb",
+        type=int,
+        default=4096,
+        metavar="N",
+        help="total megabytes per run (default: 4096)",
+    )
+    parser.add_argument(
+        "--jobs", "-j", type=int, default=1, metavar="N", help="process N files at a time"
+    )
+    parser.add_argument("--open", action="store_true", help="open the run page in your browser")
+    parser.add_argument("-v", "--verbose", action="count", default=0, help="say more")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="revelai",
@@ -261,6 +326,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_enhance_arguments(both, output_flag=False)
     _add_common(both)
     both.set_defaults(handler=_run_both_command)
+
+    serve = subcommands.add_parser(
+        "serve",
+        help="run RevelAI from a page in your browser, on this machine only",
+        description=(
+            "Start a local server so RevelAI can be driven from a browser. "
+            "It listens on the loopback interface: no other machine can reach it."
+        ),
+    )
+    _add_serve_arguments(serve)
+    serve.set_defaults(handler=_run_serve_command)
 
     return parser
 
@@ -598,6 +674,101 @@ def _run_both_command(args: argparse.Namespace) -> int:
     print("Stage 2 of 2: enhance")
     args.recursive = False
     return _enhance(args, args.out_split, args.out_enhanced, banner=False)
+
+
+# --------------------------------------------------------------------------
+# serve
+# --------------------------------------------------------------------------
+
+#: Where the hosted run page lives. It is a static page: it has no server of
+#: its own, it cannot receive an image, and the only thing it ever talks to is
+#: the server this command starts, on this machine.
+RUN_PAGE = "https://maikotrindade.com/revelAI/run/"
+
+SERVE_NOTICE = """\
+Your photographs are processed here, on this machine, and are not uploaded
+anywhere. The page you open is a static page with no server behind it; the only
+thing it talks to is this process."""
+
+
+def _run_serve_command(args: argparse.Namespace) -> int:
+    import webbrowser
+
+    from revelai.server import ServeConfig, build_server
+    from revelai.server.config import DEFAULT_ALLOWED_ORIGINS
+
+    origins = DEFAULT_ALLOWED_ORIGINS + tuple(args.allow_origin or ())
+    config = ServeConfig(
+        host=args.host,
+        port=args.port,
+        allow_origins=origins,
+        backend=args.backend,
+        allow_generative=args.allow_generative,
+        ui_dir=str(args.ui_dir) if args.ui_dir else None,
+        max_files=args.max_files,
+        max_total_bytes=max(1, args.max_mb) * 1024 * 1024,
+        jobs=max(1, args.jobs),
+    )
+
+    log = print if args.verbose else None
+    try:
+        server, store = build_server(config, log=log)
+    except OSError as exc:
+        # Something is already on that port, which is an ordinary thing to
+        # happen - usually a `revelai serve` from another window - and it has
+        # to come out as a sentence rather than a traceback.
+        import errno
+
+        if exc.errno == errno.EADDRINUSE:
+            print(
+                f"error: something is already listening on {config.host}:{config.port}.\n"
+                f"       If it is another revelai serve, use that one. Otherwise "
+                f"choose another port with --port.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"error: could not listen on {config.host}:{config.port}: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    port = server.server_address[1]
+
+    page = f"{config.base_url}/" if config.ui_dir else RUN_PAGE
+    if not config.ui_dir and port != 8765:
+        # The page probes the usual ports; an unusual one has to be told to it.
+        page = f"{RUN_PAGE}?port={port}"
+
+    print(f"{_BANNER}\n")
+    print(f"Listening on http://{config.host}:{port}")
+    print(f"Open:        {page}")
+    print(f"Settings:    {config.describe()}")
+    if config.uploads_photographs:
+        print()
+        print(f"NOTE: the {config.backend} backend uploads your photographs to a third party.")
+        print("      Start without --backend to keep everything on this machine.")
+    else:
+        print()
+        print(SERVE_NOTICE)
+    if config.allow_generative:
+        print()
+        print("Face restoration and colourisation are enabled for this session.")
+        print("They reconstruct and invent detail. See --help and the README.")
+    print("\nPress Ctrl+C to stop.")
+
+    if args.open:
+        webbrowser.open(page)
+
+    try:
+        server.serve_forever(poll_interval=0.2)
+    except KeyboardInterrupt:
+        print("\nStopping.")
+    finally:
+        server.shutdown()
+        server.server_close()
+        # Every uploaded page and every result lived in one temporary
+        # directory, and it goes when the server does. Nothing is left behind
+        # for somebody to find later.
+        store.close()
+        print("Temporary files removed.")
+    return EXIT_OK
 
 
 # --------------------------------------------------------------------------
