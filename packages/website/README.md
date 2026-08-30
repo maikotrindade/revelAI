@@ -2,6 +2,8 @@
 
 **Status: not implemented.** This directory is the reserved space for it.
 
+👉 **[PROMPT.md](PROMPT.md) is the implementation brief** — scope, stack, hard rules, quality bar and definition of done. Start there.
+
 The public face of [RevelAI](../../README.md): what the tool does, what it
 refuses to do, and why the honest limitations are on the front page rather than
 buried. The engine and the CLI are the product; this explains them.

@@ -2,6 +2,8 @@
 
 **Status: not implemented.** This directory is the reserved space for it.
 
+👉 **[PROMPT.md](PROMPT.md) is the implementation brief** — scope, stack, hard rules, quality bar and definition of done. Start there.
+
 A [Model Context Protocol](https://modelcontextprotocol.io) server that exposes
 the [RevelAI engine](../engine) to AI assistants, so an assistant can split an
 album page or restore a photograph on the user's behalf.

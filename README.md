@@ -10,13 +10,13 @@ originals, restores them.
 ![One photograph of an album page becomes four separate, deskewed photographs](packages/engine/docs/img/split-example.png)
 
 This repository is a monorepo. The engine is built; the other two packages are
-reserved space with their scope written down and nothing implemented yet.
+reserved space, each with a written implementation brief and nothing built yet.
 
 | Package | What it is | Status |
 | --- | --- | --- |
 | [`packages/engine`](packages/engine) | The Python library and the `revelai` CLI. Detection, cropping, restoration, VLM verification. | **Built** — 239 tests, CI on Linux/macOS/Windows × Python 3.10–3.13 |
-| [`packages/website`](packages/website) | The public site: what the tool does, and the honest limitations on the front page. | Reserved |
-| [`packages/mcp-server`](packages/mcp-server) | An MCP server exposing the engine to AI assistants. | Reserved |
+| [`packages/website`](packages/website) | The public site: what the tool does, and the honest limitations on the front page. | Reserved — [brief](packages/website/PROMPT.md) |
+| [`packages/mcp-server`](packages/mcp-server) | An MCP server exposing the engine to AI assistants. | Reserved — [brief](packages/mcp-server/PROMPT.md) |
 
 ## Quick start
 
