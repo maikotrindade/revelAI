@@ -7,7 +7,12 @@ name = "revelai"
 version = "0.1.0"
 description = "Split album page scans into individual photos, then restore them with AI"
 readme = "README.md"
-license = { file = "LICENSE" }
+# An SPDX expression rather than a file reference. In this monorepo the LICENSE
+# lives at the repository root, which a build backend cannot reach from inside
+# a package, and duplicating it here would leave two copies to drift apart. The
+# sdist force-includes the real file (see below); the wheel carries the licence
+# in its metadata as License-Expression.
+license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Maiko Trindade" }]
 keywords = [
@@ -22,7 +27,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -57,6 +61,9 @@ revelai = "revelai.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/revelai"]
+
+[tool.hatch.build.targets.sdist.force-include]
+"../../LICENSE" = "LICENSE"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

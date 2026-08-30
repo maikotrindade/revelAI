@@ -1,14 +1,27 @@
-name: CI
+name: engine
 
+# Path-filtered so that work on the website or the MCP server does not spend
+# twelve runner-minutes re-testing an engine nobody touched. Each package gets
+# its own workflow on the same pattern.
 on:
   push:
     branches: [main]
+    paths:
+      - "packages/engine/**"
+      - ".github/workflows/engine-ci.yml"
   pull_request:
+    paths:
+      - "packages/engine/**"
+      - ".github/workflows/engine-ci.yml"
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/engine
 
 jobs:
   lint:

@@ -1,4 +1,4 @@
-# Python
+# ---------------------------------------------------------------- Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,14 +10,28 @@ build/
 *.egg-info/
 .eggs/
 
-# Tooling caches
+# ---------------------------------------------------------------- Node
+# Reserved for packages/website and any future JavaScript package.
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# ---------------------------------------------------------------- Tooling
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .coverage
 htmlcov/
 
-# RevelAI model cache used by the local enhance backend
+# ---------------------------------------------------------------- RevelAI
+# Model cache used by the local enhance backend
 .revelai_models/
 models/
 
@@ -25,7 +39,7 @@ models/
 photos/
 photos_enhanced/
 
-# OS / editor
+# ---------------------------------------------------------------- OS / editor
 .DS_Store
 Thumbs.db
 .idea/
