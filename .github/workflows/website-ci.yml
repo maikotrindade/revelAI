@@ -45,4 +45,24 @@ jobs:
         run: |
           test -f packages/website/out/index.html
           test -f packages/website/out/honest-limitations/index.html
+          test -f packages/website/out/run/index.html
           echo "static export contains $(find packages/website/out -name '*.html' | wc -l) pages"
+      # The run page drives a server on the visitor's own machine and must not
+      # learn to talk to anything else. Anything but loopback and the two links
+      # the page deliberately makes is a regression in the product's central
+      # promise, so it fails the build rather than being noticed later.
+      - name: The run page must contact loopback and nothing else
+        run: |
+          # www.w3.org is the SVG namespace, which is an identifier rather than
+          # a request; github.com and maikotrindade.com are links the page makes
+          # on purpose. Anything else is a host this page learned to talk to.
+          hosts=$(grep -oE 'https?://[a-zA-Z0-9.:_-]+' packages/website/out/run/index.html \
+            | sort -u \
+            | grep -vE '^https?://(127\.0\.0\.1|localhost)(:[0-9]+)?$' \
+            | grep -vE '^https?://www\.w3\.org$' \
+            | grep -vE '^https://(github\.com|maikotrindade\.com)$' || true)
+          if [ -n "$hosts" ]; then
+            echo "Unexpected hosts in the run page:"; echo "$hosts"; exit 1
+          fi
+          grep -q '127.0.0.1' packages/website/out/_next/static/chunks/app/run/*.js
+          echo "run page contacts loopback only"
