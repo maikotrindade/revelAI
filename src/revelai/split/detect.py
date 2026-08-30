@@ -58,6 +58,12 @@ class DetectParams:
     max_page_iou: float = 0.70
     #: How much of a candidate must lie inside another to count as contained.
     containment: float = 0.85
+    #: A part of a merged candidate must be at least this fraction of it. Two
+    #: touching photographs are about half the blob each; a scatter of small
+    #: fragments inside one photograph is not evidence of a merge.
+    min_part_fraction: float = 0.25
+    #: The parts must between them account for this much of the merged blob.
+    merge_coverage: float = 0.65
     #: An internal border this strong, relative to the candidate's own outer
     #: borders, means the candidate is two photographs rather than one. On the
     #: test fixtures a single photograph never exceeds 0.18, however busy its
@@ -213,6 +219,13 @@ def _fit_smooth_surface(bgr: np.ndarray, seed: np.ndarray, fallback: np.ndarray)
     stays correct out to the very edge of the page. Quadratic is the right
     order: it covers a light gradient across the page and simple vignetting,
     while being far too stiff to bend around a photograph and explain it away.
+
+    Two safeguards make the extrapolation trustworthy. The fit is repeated with
+    outliers dropped, because a large flat bright area inside a photograph looks
+    exactly like paper to the test that nominates seeds, and a patch of one
+    tilts the whole surface. And the result is held to the range of the paper it
+    was fitted to, because a quadratic asked to extrapolate is under no
+    obligation to stay sensible.
     """
     height, width = bgr.shape[:2]
     ys, xs = np.nonzero(seed)
@@ -229,22 +242,44 @@ def _fit_smooth_surface(bgr: np.ndarray, seed: np.ndarray, fallback: np.ndarray)
     basis = np.stack([np.ones_like(nx), nx, ny, nx * nx, nx * ny, ny * ny], axis=1)
     samples = bgr[ys, xs].astype(np.float64)
 
-    try:
-        coefficients, *_ = np.linalg.lstsq(basis, samples, rcond=None)
-    except np.linalg.LinAlgError:  # pragma: no cover - degenerate seeds
+    keep = np.ones(len(xs), dtype=bool)
+    coefficients = None
+    for _ in range(3):
+        try:
+            coefficients, *_ = np.linalg.lstsq(basis[keep], samples[keep], rcond=None)
+        except np.linalg.LinAlgError:  # pragma: no cover - degenerate seeds
+            return fallback
+        error = np.abs(basis @ coefficients - samples).max(axis=1)
+        spread = float(np.median(error[keep]))
+        if spread <= 1e-6:
+            break
+        tightened = keep & (error <= max(4.0, 3.0 * spread))
+        if tightened.sum() < 64 or tightened.sum() == keep.sum():
+            break
+        keep = tightened
+
+    if coefficients is None:  # pragma: no cover - defensive
         return fallback
 
-    residual = float(np.abs(basis @ coefficients - samples).mean())
-    if not np.isfinite(residual) or residual > 24.0:
+    residual = float(np.abs(basis[keep] @ coefficients - samples[keep]).mean())
+    if not np.isfinite(residual) or residual > 12.0:
         # The seeds are not describing one smooth surface; do not trust the fit.
         return fallback
 
-    grid_y, grid_x = np.mgrid[0:height, 0:width]
-    gx = grid_x.astype(np.float32) / max(width - 1, 1)
-    gy = grid_y.astype(np.float32) / max(height - 1, 1)
-    full = np.stack([np.ones_like(gx), gx, gy, gx * gx, gx * gy, gy * gy], axis=2)
-    field_ = full.reshape(-1, 6) @ coefficients
-    return np.maximum(field_.reshape(height, width, 3).astype(np.float32), 1.0)
+    # Evaluate by broadcasting a row and a column rather than materialising a
+    # (height * width, 6) basis matrix, which for a full page is a hundred
+    # million floats to build and multiply for a six term polynomial.
+    gx = (np.arange(width, dtype=np.float32) / max(width - 1, 1))[None, :]
+    gy = (np.arange(height, dtype=np.float32) / max(height - 1, 1))[:, None]
+    terms = (np.float32(1.0), gx, gy, gx * gx, gx * gy, gy * gy)
+    field_ = np.zeros((height, width, 3), np.float32)
+    for term, channel_coefficients in zip(terms, coefficients, strict=True):
+        field_ += np.asarray(term, np.float32)[..., None] * channel_coefficients.astype(np.float32)
+
+    low = samples[keep].min(axis=0).astype(np.float32) * 0.85
+    high = samples[keep].max(axis=0).astype(np.float32) * 1.15
+    field_ = np.clip(field_, low, high)
+    return np.maximum(field_, 1.0)
 
 
 # --------------------------------------------------------------------------
@@ -520,6 +555,8 @@ def _drop_merged(
         for other_index, (child, _) in enumerate(scored):
             if other_index == index or child.area >= parent.area * 0.85:
                 continue
+            if child.area < params.min_part_fraction * parent.area:
+                continue
             if _containment(child, parent) >= params.containment:
                 children.append(child)
 
@@ -529,7 +566,7 @@ def _drop_merged(
                 disjoint.append(child)
 
         covered = sum(child.area for child in disjoint)
-        if len(disjoint) >= 2 and covered >= 0.6 * parent.area:
+        if len(disjoint) >= 2 and covered >= params.merge_coverage * parent.area:
             continue
         survivors.append((parent, score))
     return survivors

@@ -30,6 +30,7 @@ __all__ = [
     "hard_page",
     "empty_page",
     "single_photo_page",
+    "tiny_page",
     "touching_pair_page",
     "yellow_cast_image",
     "write_pages",
@@ -242,6 +243,36 @@ def touching_pair_page(seed: int = 1) -> SyntheticPage:
 def single_photo_page(seed: int = 2) -> SyntheticPage:
     """One photograph, used for exact geometry assertions."""
     return build_page([PhotoSpec(750, 1050, 900, 640, 2.2, (105, 95, 120))], seed=seed)
+
+
+def tiny_page(seed: int = 6, photos: int = 2) -> SyntheticPage:
+    """A small page, for tests about naming, ordering and file output.
+
+    Those tests care about how many files appear and what they are called, not
+    about sub-pixel geometry, and a full size page costs several seconds to
+    build and split. This one is a fifth of the area, in a fixed two-column
+    layout so that reading order is unambiguous.
+    """
+    tones = [(110, 90, 70), (70, 110, 140), (95, 125, 100), (140, 100, 110)]
+    angles = [-1.4, 1.2, 0.8, -0.9]
+    specs = [
+        PhotoSpec(
+            cx=150 + 220 * (index % 2),
+            cy=140 + 200 * (index // 2),
+            w=180,
+            h=140,
+            angle=angles[index % len(angles)],
+            tone=tones[index % len(tones)],
+        )
+        for index in range(photos)
+    ]
+    return build_page(
+        specs,
+        page_size=(520, 700),
+        canvas_size=(620, 820),
+        page_offset=(50.0, 50.0),
+        seed=seed,
+    )
 
 
 def empty_page(seed: int = 3) -> SyntheticPage:

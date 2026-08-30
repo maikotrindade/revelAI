@@ -24,21 +24,47 @@ __all__ = ["crop_quad", "crop_rect", "inset_corners"]
 
 
 def inset_corners(corners: np.ndarray, inset: float) -> np.ndarray:
-    """Pull a quadrilateral ``inset`` pixels inward, towards its own centre.
+    """Trim ``inset`` pixels off every edge of a quadrilateral.
 
     The trim exists because a crop taken exactly on the detected border tends to
     keep a hairline of album paper along one edge, which is more objectionable
     in a family album than losing three pixels of sky.
+
+    Each *edge* is moved inward along its own normal and the corners are then
+    re-intersected. Sliding the corners towards the centre instead would be
+    simpler and is wrong: a corner moves along the diagonal, so an edge of a
+    600 by 400 crop would lose ``inset * cos(theta)`` rather than ``inset``, and
+    ``--inset 5`` would trim a different amount horizontally and vertically.
     """
     pts = np.asarray(corners, dtype=np.float64).reshape(4, 2)
     if inset == 0:
         return pts.copy()
+
     centre = pts.mean(axis=0)
-    out = np.empty_like(pts)
-    for i, point in enumerate(pts):
-        direction = centre - point
+    lines: list[tuple[np.ndarray, np.ndarray]] = []
+    for i in range(4):
+        start, end = pts[i], pts[(i + 1) % 4]
+        direction = end - start
         length = float(np.hypot(*direction))
-        out[i] = point + direction / length * inset if length > 1e-9 else point
+        if length < 1e-9:
+            return pts.copy()
+        direction = direction / length
+        normal = np.array([-direction[1], direction[0]])
+        if np.dot(centre - start, normal) < 0:
+            normal = -normal
+        lines.append((start + normal * inset, direction))
+
+    out = np.empty_like(pts)
+    for i in range(4):
+        # Corner i is where the edge before it meets the edge after it.
+        point_a, dir_a = lines[(i - 1) % 4]
+        point_b, dir_b = lines[i]
+        denominator = dir_a[0] * dir_b[1] - dir_a[1] * dir_b[0]
+        if abs(denominator) < 1e-9:  # parallel edges, degenerate quad
+            return pts.copy()
+        delta = point_b - point_a
+        t = (delta[0] * dir_b[1] - delta[1] * dir_b[0]) / denominator
+        out[i] = point_a + dir_a * t
     return out
 
 
