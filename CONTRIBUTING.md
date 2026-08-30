@@ -96,6 +96,16 @@ every package, including ones that only call the engine.
 8. **Face restoration and colourisation stay off by default**, and anything that
    enables them must surface the warning. They reconstruct and invent; that is
    the whole reason the warnings exist.
+9. **Whether photographs leave the machine is never decided by an untrusted
+   caller.** `revelai serve` and the MCP server both take the backend from a
+   startup flag and refuse to read one from a request or a tool parameter. A
+   web page and a language model are both things that do what they were told by
+   something you have not read; neither gets that decision. The same goes for
+   the two generative operations, which need `--allow-generative`.
+10. **`revelai serve` binds to loopback and stays there.** It checks the `Host`
+    header on every request so a rebound hostname cannot pass as same-origin,
+    and it never accepts a filesystem path from a request — the browser sends
+    bytes, and the server chooses the names it writes them under.
 
 ## Commits and branches
 
@@ -120,6 +130,7 @@ every package, including ones that only call the engine.
 | `src/revelai/enhance/color.py` | Classical colour correction, no AI |
 | `src/revelai/enhance/backends/` | Pluggable restoration backends |
 | `src/revelai/vlm/` | Vision-language verification and description |
+| `src/revelai/server/` | The loopback HTTP API behind `revelai serve` |
 | `src/revelai/io.py` | Reading, ICC, lossless PNG writing, metadata |
 | `src/revelai/naming.py` | Global sequential numbering and ordering |
 
