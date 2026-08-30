@@ -1,0 +1,70 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "revelai-mcp"
+version = "0.1.0"
+description = "Model Context Protocol server exposing the RevelAI engine to AI assistants"
+readme = "README.md"
+# An SPDX expression rather than a file reference: in this monorepo the LICENSE
+# lives at the repository root, which a build backend cannot reach from inside
+# a package. The sdist force-includes the real file; see the engine package for
+# the same arrangement.
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Maiko Trindade" }]
+keywords = ["mcp", "model-context-protocol", "photo-restoration", "revelai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+]
+dependencies = [
+    "mcp>=1.2",
+    "revelai>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "pytest-asyncio>=0.23", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/maikotrindade/revelAI"
+Repository = "https://github.com/maikotrindade/revelAI"
+
+[project.scripts]
+revelai-mcp = "revelai_mcp.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/revelai_mcp"]
+
+[tool.hatch.build.targets.sdist.force-include]
+"../../LICENSE" = "LICENSE"
+
+# Developed against the engine in this monorepo rather than a published wheel.
+[tool.uv.sources]
+revelai = { path = "../engine", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
