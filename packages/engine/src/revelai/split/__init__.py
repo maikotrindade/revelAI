@@ -414,15 +414,27 @@ def run_split(
         except Exception as exc:  # noqa: BLE001 - a bad page must not stop the run
             return source, None, f"could not be processed: {exc}"
 
-    # Detection runs in parallel, but results are consumed in page order, so
-    # the numbering does not depend on which page finished first.
-    if jobs > 1 and review is None:
-        with ThreadPoolExecutor(max_workers=jobs) as pool:
-            analysed = list(pool.map(analyse, inputs))
-    else:
-        analysed = [analyse(source) for source in inputs]
+    def analysed():
+        """Yield analysed pages one at a time, in page order.
 
-    for source, payload, error in analysed:
+        Detection runs in parallel, but results are consumed in page order, so
+        the numbering does not depend on which page finished first.
+
+        The results are yielded lazily rather than collected into a list first.
+        ``Executor.map`` submits every task immediately, so the parallelism is
+        unchanged; what laziness buys is that ``on_page`` fires as each page
+        finishes rather than all at once at the end. A caller drawing a progress
+        bar - ``revelai serve`` does - needs the difference between "3 of 12
+        done" and one jump from nothing to everything.
+        """
+        if jobs > 1 and review is None:
+            with ThreadPoolExecutor(max_workers=jobs) as pool:
+                yield from pool.map(analyse, inputs)
+        else:
+            for source in inputs:
+                yield analyse(source)
+
+    for source, payload, error in analysed():
         page_report = PageReport(source=source)
         if error is not None:
             page_report.error = error
