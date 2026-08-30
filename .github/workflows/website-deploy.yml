@@ -34,6 +34,10 @@ jobs:
           cache: pnpm
       - uses: actions/configure-pages@v5
         id: pages
+        with:
+          # Turn Pages on if it is not already, rather than failing the first
+          # deploy on a fresh clone of this repository.
+          enablement: true
       - run: pnpm install --frozen-lockfile
       - name: Build
         # A project site is served from /<repo>, so assets need the prefix.
